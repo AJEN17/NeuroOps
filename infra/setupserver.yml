@@ -1,0 +1,63 @@
+---
+- name: Configure CI/CD Server Swap Docker Jenkins
+  hosts: all
+  become: yes
+  tasks:
+    - name: Create 2GB swap file
+      command: fallocate -l 2G /swapfile
+      args:
+        creates: /swapfile
+
+    - name: Set swap file permissions
+      file:
+        path: /swapfile
+        mode: '0600'
+
+    - name: Format swap file
+      command: mkswap /swapfile
+      when: ansible_swaptotal_mb == 0
+
+    - name: Enable swap
+      command: swapon /swapfile
+      when: ansible_swaptotal_mb == 0
+
+    - name: Add swap to fstab to survive reboots
+      mount:
+        name: none
+        src: /swapfile
+        fstype: swap
+        opts: sw
+        passno: 0
+        dump: 0
+        state: present
+
+    - name: Install base dependencies and Java
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+          - openjdk-17-jre
+        state: present
+        update_cache: yes
+
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
+
+    - name: Ensure Docker service is running
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Force Install Jenkins Without Keys
+      shell: echo "deb [trusted=yes] https://pkg.jenkins.io/debian-stable binary/" > /etc/apt/sources.list.d/jenkins.list && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y jenkins --allow-unauthenticated
+
+    - name: Ensure Jenkins service is running
+      service:
+        name: jenkins
+        state: started
+        enabled: yes
